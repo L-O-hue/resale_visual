@@ -9,6 +9,12 @@ This project analyzes HDB resale prices in Singapore from 1990 to 2025 to uncove
   - Median household income data (2000–2024)
   - Master Plan planning area boundaries
 
+## Files in This Repository
+- `Resale.Rmd` – R Markdown file with full analysis and visualizations  
+- `Knitted report.docx` – Knitted word doc report of the analysis  
+- `data/` – Folder containing cleaned CSV and JSON datasets  
+
+
 ## Tools & Technologies
 - **R** – data cleaning, manipulation, and visualization  
 - **R Markdown** – reproducible report with code and visualizations  
