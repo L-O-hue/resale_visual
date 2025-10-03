@@ -15,7 +15,7 @@ This project analyzes HDB resale prices in Singapore from 1990 to 2025 to uncove
 - `datasets.zip` – Compressed folder containing the raw CSV and JSON datasets used for the analysis 
 
 
-## Tools & Technologies
+## Tools
 - **R** – data cleaning, manipulation, and visualization  
 - **R Markdown** – reproducible report with code and visualizations  
 - **ggplot2 / dplyr / tidyr / sf** – key R packages for analysis, plotting, and spatial visualization  
