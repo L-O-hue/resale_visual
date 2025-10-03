@@ -12,7 +12,7 @@ This project analyzes HDB resale prices in Singapore from 1990 to 2025 to uncove
 ## Files in This Repository
 - `Resale.Rmd` – R Markdown file with full analysis and visualizations  
 - `Knitted report.docx` – Knitted word doc report of the analysis  
-- `datasets.zip` – Compressed folder containing the raw CSV and JSON datasets used for the analysis 
+- `datasets.zip` – Compressed folder containing the raw CSV, XLSX and JSON datasets used for the analysis 
 
 
 ## Tools
