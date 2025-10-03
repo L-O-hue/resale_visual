@@ -1,0 +1,730 @@
+---
+title: "The HDB Resale Market and Affordability: 1990 to the 2025"
+output: word_document
+---
+
+```{r Set up & load libraries, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width = 8, fig.height = 6)
+
+# Get working directory
+getwd()
+
+# Load libraries
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggridges)
+library(zoo)
+library(stringr)
+library(lubridate)
+library(sf)
+library(scales)
+library(forcats)
+library(maps)
+library(hexbin)
+```
+
+## Executive Summary
+
+This report analyses trends in the HDB resale market from 1990 to 2025, and evaluates housing affordability. Over the three decades, resale prices have steadily increased across all flat types. 4-Room flats are now accounting for the largest share of resale transactions. Actual sizes of flats have also changed over time. Geospatial analyses show that resale flats in the Central and Eastern towns of Singapore experienced the most significant price growth. Affordability varied over the years, with flats in the early 1990s being the most affordable, followed by a sharp decline in affordability in the mid-1990s. Over the next two decades, affordability continued to fluctuate, with the past five years showing a trend toward reduced affordability. Older flats with shorter lease remaining, while more affordable, showed reduced transaction volume, highlighting the influence of leasehold on buyers' behavior. The insights from our analyses highlight both rising prices and changes in affordability patterns - both of which are important to buyers, sellers and policymakers.
+
+## Introduction
+
+Given that majority of Singapore's residents reside in public housing flats developed and managed by the Housing and Development Board (HDB), public housing is crucial in understanding Singapore's housing landscape. While new Built-To-Order (BTO) flats are sold by HDB with subsidies and tighter controls over pricing, the resale market is largely driven by market demand and as a result, it is indicative of broader economic and social conditions. Having a good understanding of the HDB resale market is crucial for households making financial commitments but also for policymakers concerned with housing affordability.
+
+The two objectives of this study are:
+
+1\. To analyse long-term trends in the HDB resale market from 1990 to 2025, with focus on price growth, market composition of flat types, and regional patterns.
+
+2\. To evaluate housing affordability over time, and across different housing segments.
+
+To answer these objectives, I first conducted an overall landscape analysis of the HDB resale market. The analyses included an examination of price trends across flat types, studying the distribution of resale prices over time, looking at the shifts in composition of flat types transacted, and visualizing geographical variability through regional heatmaps and choropleth maps. In the second part of the report, I focused on housing affordability. By constructing Price-to-Income as a measure, I analysed affordability over time, look at differences across flat types and regions, and examined the interaction and relationship between affordability and decaying lease.
+
+Findings from the study reveal that resale prices across all flat types have risen steadily over time, with steeper increase over the five years. Market composition has also shifted - 4-room flats now dominate resale transactions instead of 3-room flats. Size of flats have varied over the years, with older 4-room flats being larger in comparison to recently built ones. Disparities in prices and affordability between different regions and towns are apparent, with central areas commanding the highest prices and putting the greatest pressure on affordability. The study also found that P/I ratio - measure of affordability - was lowest (most affordable) in the early 1990s but increased sharply in the mid-1990s and greatly reducing affordability. Since then, affordability has varied, with the most recent five years showing renewed signs of stress. Although older flats tend to be more affordable, demand falls significantly once the remaining lease drops below 60 years.
+
+In summary, the HDB resale market has become more nuanced and segmented over the past three decades. Resale prices and affordability have changed not only across years, but also across flat types and regions. The study's findings underscore current concerns about housing affordability, particularly in prime locations and in the context of decaying lease. The pricing and affordability insights are key for more in-depth housing policy discussions and provide households with a data-driven view of the evolution of the resale market.
+
+## Data
+
+```{r Import HDB csv files, echo=FALSE, include=FALSE}
+
+# Read csv files into new dataframes
+hdb_1990 <- read.csv("Resale Flat Prices (Based on Approval Date), 1990 - 1999.csv")
+hdb_2000 <- read.csv("Resale Flat Prices (Based on Approval Date), 2000 - Feb 2012.csv")
+hdb_2012 <- read.csv("Resale Flat Prices (Based on Registration Date), From Mar 2012 to Dec 2014.csv")
+hdb_2015 <- read.csv("Resale Flat Prices (Based on Registration Date), From Jan 2015 to Dec 2016.csv")
+hdb_2017 <- read.csv("Resale flat prices based on registration date from Jan-2017 onwards.csv")
+
+```
+
+### HDB resale data
+
+Our HDB resale data from 1990 to 2025 was obtained from the Housing & Development Board (1990, 2000, 2012, 2015, 2017) in five separate CSV files. Data was retrieved on 11 September 2025. Each dataset was in long format and contained the following variables: *month*, *town*, *flat_type*, *block*, *street_name*, *storey_range*, *floor_area_sqm*, *flat_model*, *lease_commence_date*, *resale_price*. From 2015 onward, an additional variable, *remaining_lease*, was also provided within the dataset.
+
+Before merging the datasets, we conducted sanity checks on each dataset for consistency in data types, outliers handling and missing values. For example, the variable *resale_price* in the 1990 dataset was converted to numeric from integer for standardization.
+
+```{r Sanity check 1990, echo=FALSE, include=FALSE}
+# Check the data type for variables
+str(hdb_1990) 
+
+# Convert resale price from int to numeric
+hdb_1990 <- hdb_1990 %>%
+  mutate(resale_price = as.numeric(resale_price))
+
+# Check class of resale_price after conversion
+class(hdb_1990$resale_price)
+
+summary(hdb_1990) # Check for outliers
+sum(is.na(hdb_1990)) # Check for any missing values
+```
+
+```{r Sanity check for 2000 & 2012 data, echo=FALSE, include=FALSE}
+# Sanity check for 2000 - Feb 2012 data
+str(hdb_2000)
+summary(hdb_2000)
+sum(is.na(hdb_2000))
+
+# Sanity check for Mar 2012 - Dec 2014 data
+str(hdb_2012)
+summary(hdb_2012)
+sum(is.na(hdb_2012))
+```
+
+For 2015 and 2017 datasets, the data type of *remaining_lease* data type were standardized to numeric from character. As the *remaining_lease* variable in the 2017 data contains both years and months (e.g. "61 years 08 months"), only the years were extracted to maintain consistency with the 2015 dataset.
+
+```{r Sanity check for 2015 data, echo=FALSE, include=FALSE}
+# Check data type
+str(hdb_2015)
+
+# Convert remaining_lease (int) to numeric
+hdb_2015 <- hdb_2015 %>%
+  mutate(remaining_lease = as.numeric(remaining_lease))
+
+# Check data type
+class(hdb_2015$remaining_lease)
+
+# Check for outliers
+summary(hdb_2015)
+
+# Check for missing data
+sum(is.na(hdb_2015))
+```
+
+```{r Sanity check for 2017 data, echo=FALSE, include=FALSE}
+# Check data type
+str(hdb_2017) 
+
+# Convert remaining_lease (chr) to num and extracting only the year
+hdb_2017 <- hdb_2017 %>%
+  mutate(remaining_lease = as.numeric(str_extract(remaining_lease, "\\d+(?=\\s*year)")))
+
+# Check class
+class(hdb_2017$remaining_lease)
+
+# Check for outliers
+summary(hdb_2017)
+
+# Check for missing data
+sum(is.na(hdb_2017))
+```
+
+After initial cleaning, the five individual dataset were merged into a consolidated resale dataframe, followed by further cleaning and transformations. The *month* was standardized into a date class object, and a new *year* variable was derived to facilitate calculation of *remaining_lease* for transactions before 2015. After calculating, we identified 51 potentially erroneous transactions where the transaction dates were earlier than the lease commencement dates. As these records may be inconsistent with HDB lease rules, they were excluded from any analysis involving remaining lease to ensure accuracy in subsequent analyses.
+
+```{r merge HDB data, echo=FALSE, include=FALSE}
+# Merge the dataframes together
+resale_raw <- bind_rows(hdb_1990,hdb_2000,hdb_2012,hdb_2015,hdb_2017)
+```
+
+```{r cleaning of merged data, echo=FALSE, include=FALSE}
+# Check data type
+str(resale_raw)
+
+# Convert date class, calculate missing leasehold and save to new df
+resale_df <- resale_raw %>%
+  mutate(month = as.Date(paste0(month, "-01"))) %>% # Convert month to date class
+  mutate(year = year(month)) %>% # Extract out year into new column
+  mutate(remaining_lease = ifelse(
+    is.na(remaining_lease),
+    99 - (year - lease_commence_date),
+    remaining_lease)) # Calculate remaining leasehold for missing values
+
+# Check data type again
+str(resale_df)
+
+# Check for potential errorenous lease
+resale_df %>%
+  filter(remaining_lease > 99) %>%
+  select(flat_type, resale_price, remaining_lease, month, lease_commence_date)
+```
+
+To ensure categorical consistency, inconsistent entries such as MULTI-GENERATION and MULTI GENERATION were standardized to MULTI GENERATION under *flat_type*. Additionally, a new variable *region* was created to group the towns to their official URA region (East, West, Central, North, North-East).
+
+The final cleaned HDB resale dataframe comprises of 962100 observations across 13 variables.
+
+```{r cleaning of merged data1, echo=FALSE, include=FALSE}
+# Check for missing data
+sum(is.na(resale_df))
+
+# Check for cateogorical consistencies
+unique(resale_df$town)
+unique(resale_df$flat_type)
+
+# Standardize mutli generation flat type spelling
+resale_df <- resale_df %>%
+  mutate(flat_type = str_replace_all(flat_type, "MULTI-GENERATION", "MULTI GENERATION"))
+
+# Create new variable region
+resale_df <- resale_df %>%
+  mutate(region = case_when(
+    town %in% c("BISHAN", "BUKIT MERAH", "BUKIT TIMAH",
+                "CENTRAL AREA", "QUEENSTOWN", "TOA PAYOH",
+                "KALLANG/WHAMPOA") ~ "CENTRAL REGION",
+    
+    town %in% c("BEDOK", "GEYLANG", "MARINE PARADE",
+                "PASIR RIS", "TAMPINES") ~ "EAST REGION",
+    
+    town %in% c("LIM CHU KANG", "SEMBAWANG",
+                "WOODLANDS", "YISHUN") ~ "NORTH REGION",
+    
+    town %in% c("ANG MO KIO", "HOUGANG", "SENGKANG",
+                "SERANGOON", "PUNGGOL") ~ "NORTH-EAST REGION",
+    
+    town %in% c("BUKIT BATOK", "BUKIT PANJANG",
+                "CHOA CHU KANG", "CLEMENTI",
+                "JURONG EAST", "JURONG WEST") ~ "WEST REGION",
+    
+    TRUE ~ NA_character_  # catch any towns not mapped
+  ))
+
+# Check counts to make sure all regions populated
+table(resale_df$region, useNA = "ifany")
+```
+
+### Income data
+
+To examine affordability, we downloaded median household income 2000 to 2024 (Singapore Department of Statistics, 2024). Simple data cleaning was performed to retain only the relevant columns, specifically the year and the median monthly income of resident employed households. Column names were renamed for clarity, and the *year* variable was converted from character to numeric to facilitate analysis.
+
+As median household income data only started from year 2000, we supplemented it with information from the Singapore Census of Population 2000 (Singapore Department of Statistics, 2001), which reported income figures for 1990, 1995, and 1997 to 1999. Median income was not reported in 1991 to 1994, and in 1996. For these missing data, we performed calculations based on the reported annual median income growth rate of 6.4% from 1991 to 1994, and 7.4% for 1996. A dataframe was created to store median income from 1990 to 1999 and this was merged with data from 2000 to 2024 downloaded earlier as a new income dataframe covering the full period from 1990 to 2024.
+
+```{r Read and import excel income, echo=FALSE, include=FALSE}
+
+# Import excel for 2000 to 2024 median household income
+income_2000 <- read_excel("17870.xlsx",range = "A12:E37")
+
+# Check data type
+str(income_2000)
+
+# Data cleaning
+income_2000 <- income_2000 %>%
+  select(-2, -3, -4) %>% # Keep only first and last columns
+  rename(year=1, median=2) %>% # Rename columns
+  mutate(year = as.numeric(year)) # Convert year to numeric
+
+# Calculate median income in 1991 to 1994
+2296*1.064 # 2443 in 1991
+2443*1.064 # 2599 in 1992
+2599*1.064 # 2765 in 1993
+2765*1.064 # 2942 in 1994
+
+# Calculate median income in 1996
+3135*1.074 # 3367 in 1996
+
+# Create dataframe to store 1990 to 1999 median income
+income_1990 <- data.frame(
+  year = 1990:1999,
+  median = c(2296, 2443, 2599, 2765, 2942, 3135, 3367, 3617, 3692, 3500)
+)
+
+# Merge 1990-1999 with 2000-2024 into income df
+income <- bind_rows(income_1990,income_2000)
+
+```
+
+After cleaning and transforming the HDB resale data and median household income data, we combined them together into a single data set with 962100 observations across 14 variables for further analysis.
+
+```{r merge resale and income data, echo=FALSE, include=FALSE}
+
+# Merge datasets by year into new dataframe resale_income
+resale_income <- resale_df %>%
+  left_join(income, by = "year")
+
+# Check first few rows
+head(resale_income)
+
+# Check for missing value
+sum(is.na(resale_income))
+
+# Check which column has the missing values
+colSums(is.na(resale_income)) # Median income has missing values
+
+# No median income info for 2025
+unique(resale_income$year[is.na(resale_income$median)])
+
+```
+
+### Singapore Planning Map
+
+For geographical plotting, we also downloaded the Master Plan 2019 Planning Area Boundary geoJSON file (Urban Redevelopment Authority, 2019). To clean the file, we extracted the respective towns and regions for the 55 planning areas from the *Description* column. As URA towns are defined more granularly than HDB defined towns, we re-coded certain towns in the Central and Western regions to align with HDB town definitions. For example, Boon Lay and Pioneer were grouped under Jurong West within URA data to ensure consistency with the HDB resale dataset and to ensure these areas are included in the plots.
+
+```{r Import geojson planning area, echo=FALSE, include=FALSE}
+# Load the GeoJSON 
+sg_map <- st_read("MasterPlan2019PlanningAreaBoundaryNoSea.geojson", quiet = TRUE)
+sg_map <- sg_map %>%
+  mutate(geometry = st_make_valid(geometry)) # Fix geometries to prevent plotting error
+
+# Extract town and region from Description column
+sg_map_cleaned <- sg_map %>%
+  mutate(
+    town = str_match(Description, "PLN_AREA_N</th>\\s*<td>([^<]+)")[,2],
+    region = str_match(Description, "REGION_N</th>\\s*<td>([^<]+)")[,2])
+
+# Recode selected towns to match HDB resale town data
+sg_map_cleaned <- sg_map_cleaned %>%
+  mutate(
+    town = case_when(
+      # Combine Kallang/Whampoa
+      town == "KALLANG" ~ "KALLANG/WHAMPOA",
+      
+      # Group central subzones into CENTRAL AREA
+      town %in% c("DOWNTOWN CORE", "OUTRAM", "ROCHOR", "MUSEUM", 
+                  "MARINA SOUTH", "MARINA EAST", "NEWTON", "ORCHARD", "RIVER VALLEY") ~ "CENTRAL AREA",
+      
+      # Group pioneer, boon lay into JURONG WEST
+      town %in% c("PIONEER", "BOON LAY", "JURONG WEST") ~ "JURONG WEST",
+      
+      # Keep other towns as they are
+      TRUE ~ town
+    ),
+    # Capitalise everything to ensure consistent join
+    town = str_to_upper(town)
+  ) %>%
+  # Summarise geometries by town
+  group_by(town) %>%
+  summarise(geometry = st_union(geometry), .groups = "drop")
+```
+
+## Trends and Insights in the HDB Resale Market
+
+### Overall Resale Price Trend
+
+```{r overall resale line plot, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+# Line plot of resale prices by flat type across years
+resale_income %>%
+  group_by(year, flat_type) %>%
+  summarise(median_price = median(resale_price, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = median_price, color = flat_type, group = flat_type)) +
+  geom_line(size = 0.8) +
+  geom_point(size = 1.5) +
+  scale_x_continuous(
+    breaks = seq(1990, 2025, by = 2),   # Show every 2 years
+    limits = c(1990, 2025)              # force axis to start at 1990
+  ) +
+  scale_y_continuous(labels = comma_format()) +
+  labs(
+    title = "Figure 1. Median Resale Price by Flat Type (1990–2024)",
+    x = "Year",
+    y = "Median Resale Price (SGD)",
+    color = "Flat Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    legend.position = "bottom"
+  )
+```
+
+As seen in Figure 1, the resale prices vary by the size of flat - with executive and multi generation flats commanding the highest prices. Since 1990, prices across all flat types have risen - with periods of steep increase followed by periods of cooling off and plateau. In the most recent five years, prices have increased markedly, with the sharpest increase observed in 4-room or larger flats. This surge can be attributed to the global pandemic, which has caused significant delays in the completion of multiple BTO projects (Liew, 2024). The resulting supply constraints drove more buyers to the resale market, exerting upward pressure on prices. Among the larger flats, executive and multi generation flats demonstrated the steepest increase. This trend could be attributed to their limited supplies, as such flat types are no longer being built in Singapore.
+
+### Distribution of Resale Prices
+
+```{r ridge plot distribution of resale prices, echo=FALSE, message=FALSE, warning=FALSE,dpi=300}
+# Select each decade to plot
+selected_years <- c(1994, 2004, 2014, 2024)
+
+# Plot ridgeplot of selected years
+resale_income %>%
+  filter(year %in% selected_years) %>%
+  ggplot(aes(x = resale_price, y = factor(year), fill = flat_type)) +
+  geom_density_ridges(alpha = 0.5, scale = 1.2) +
+  scale_x_continuous(labels = scales::comma) +
+  labs(
+    title = "Figure 2. Distribution of HDB Resale Prices (Selected Years)",
+    x = "Price (SGD)",
+    y = "Year",
+    fill = "Flat Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+Looking at the spread of housing prices across different decades in Figure 2, it is evident that the range of resale prices has widened significantly in recent years. In the earlier decades, resale prices were tighter - this is indicative of a relatively standardized market. In the most recent decade, the spread, especially in 3-,4- and 5-room, has widened substantially, reflecting increasing divergence in transaction prices. The spread may also be due to factors such as flat conditions, remaining lease, and proximity to amenities and transportation which have become increasingly important in influencing resale prices.
+
+### Transaction Composition by Flat Type
+
+```{r stacked chart of flat type transaction, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+resale_income %>%
+  count(year, flat_type) %>%
+  ggplot(aes(x = year, y = n, fill = flat_type)) +
+  geom_col(position = "fill") +  # Proportions of different types transacted
+  labs(title = "Figure 3. Distribution of Flat Types in Resale Transactions Over Time",
+       x = "Year", y = "Proportion", fill = "Flat Type") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+While resale prices have changed over the years, the composition of flats sold has also evolved, reflecting changes in buyers' preferences and purchasing powers. As shown in Figure 3, 3-room flats once dominated resale transactions, but over time, this has been overtaken by 4-room flats, indicating a growing demand for larger living spaces as incomes and expectations rise.
+
+### Flat Sizes Over Time
+
+```{r 4-room flat size based on built year, echo=FALSE,message=FALSE, warning=FALSE, dpi=300}
+# Line plot of 4-room flat sizes
+resale_income %>%
+  filter(flat_type == "4 ROOM") %>%
+  group_by(lease_commence_date) %>%
+  summarise(
+    median_size = median(floor_area_sqm, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = lease_commence_date, y = median_size)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_point(color = "darkred", size = 1.5) +
+  scale_x_continuous(
+    limits = c(1967, 2021),
+    breaks = seq(1967, 2021, by = 2)
+  ) +
+  labs(
+    title = "Figure 4. Median Size of 4-Room HDB Flats by Lease Commencement Year",
+    x = "Lease Commencement Year",
+    y = "Median Floor Area (sqm)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+Beyond the type of flat, the actual size of flats have also changed depending on the period they were built. Focusing on most commonly transacted 4-room flats (Figure 4), those built before 1970 and during the 1990s were generally larger compared to those recently built. This trend highlights how housing design have had to adapt to an increasing population and urban land constraints in recent times.
+
+### Geospatial Price Analysis
+
+```{r Price heatmap by region, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+resale_income %>%
+  group_by(year, region) %>%
+  summarise(median_price = median(resale_price, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = region, fill = median_price)) +
+  geom_tile() +
+  scale_fill_viridis_c(labels = scales::comma) +
+  theme_minimal() +
+  labs(title = "Figure 5. Heatmap of Median Resale Prices Across Regions",
+       x = "Year", y = "Region", fill = "Price (SGD)") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+To examine the effect of region on resale prices, we plotted a heat map of price changes in different regions over time (Figure 5). While the prices across regions were initially similar, prices in the central region has risen the most, followed by eastern and north-eastern regions. In contrast, median resale prices are lowest in the western and northern regions, highlighting a clear spatial divide in housing affordability and demand.
+
+```{r geospatial facet plot for 4 room price, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+# Facet plot for each decade starting from 1994
+decade_years <- c(1994, 2004, 2014,2024) # Store the years we want
+sg_map_cleaned %>%
+  # Expand grid of towns and decade years so every town-year combo exists
+  left_join(
+    expand_grid(
+      town = unique(sg_map_cleaned$town),
+      year = decade_years
+    ) %>%
+      left_join(
+        resale_income %>%
+          filter(flat_type == "4 ROOM", year %in% decade_years) %>%
+          group_by(town, year) %>%
+          summarise(median_price = median(resale_price, na.rm = TRUE), .groups = "drop"),
+        by = c("town", "year")
+      ),
+    by = "town"
+  ) %>%
+  ggplot() +
+  geom_sf(aes(fill = median_price), color = "white", size = 0.2) +
+  # Add text labels  for Queenstown Sembawang Punggol
+  geom_sf_text(
+    data = . %>% filter(town %in% c("QUEENSTOWN", "SEMBAWANG", "PUNGGOL")),
+    aes(label = town),
+    size = 1.3,
+    fontface = "bold",
+    color = "black"
+  ) +
+  facet_wrap(~year, ncol = 2) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::comma, na.value = "grey90") +
+  labs(
+    title = "Figure 6. How 4-Room Resale Prices Have Changed Across Towns (1994–2024)",
+    subtitle = "Grey regions represent areas with no recorded transactions",
+    fill = "Median Price",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(face = "italic", size = 12),
+    axis.text.x = element_text(size = 5.5),  # x-axis labels
+    axis.text.y = element_text(size = 5.5)   # y-axis labels
+  )
+```
+
+Given that 4-room flats have become the preferred choice in the resale market, we examined their prices across different towns in Singapore over time (Figure 6). Over the years, as new housing towns such as Sembawang and Punggol were developed in the Northern and North-eastern regions, they gradually entered the resale market and offered more affordable housing options in comparison to more established central towns. However, the disparity in resale prices has widened considerably over time, with homes in mature estates like Queenstown showing greatest price appreciation and commanding the highest median 4-room resale prices in 2024.
+
+```{r geospatial facet plot of 3 room prices, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+# Facet plot for each decade starting from 1994
+decade_years <- c(1994, 2004, 2014,2024) # Store the years we want
+sg_map_cleaned %>%
+  # Expand grid of towns and decade years so every town-year combo exists
+  left_join(
+    expand_grid(
+      town = unique(sg_map_cleaned$town),
+      year = decade_years
+    ) %>%
+      # Join to resale dataframe 
+      left_join(
+        resale_income %>%
+          filter(flat_type == "3 ROOM", year %in% decade_years) %>%
+          group_by(town, year) %>%
+          summarise(median_price = median(resale_price, na.rm = TRUE), .groups = "drop"),
+        by = c("town", "year")
+      ),
+    by = "town"
+  ) %>%
+  # Plotting
+  ggplot() +
+  geom_sf(aes(fill = median_price), color = "white", size = 0.2) +
+  # Add text labels  for Pasir ris Sengkang Punggol
+  geom_sf_text(
+    data = . %>% filter(town %in% c("PASIR RIS", "SENGKANG", "PUNGGOL")),
+    aes(label = town),
+    size = 1.3,
+    fontface = "bold",
+    color = "black"
+  ) +
+  facet_wrap(~year, ncol = 2) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::comma, na.value = "grey90") +
+  labs(
+    title = "Figure 7. How 3-Room Resale Prices Have Changed Across Towns (1994–2024)",
+    subtitle = "Grey regions represent areas with no recorded transactions",
+    fill = "Median Price",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(face = "italic", size = 12),
+    axis.text.x = element_text(size = 5.5),  # x-axis labels
+    axis.text.y = element_text(size = 5.5)   # y-axis labels
+  )
+```
+
+While our earlier analysis focused on 4-room flats as the dominant choice in the resale market, it is also instructive to examine the pricing patterns of 3-room flats given that it is second to 4-room in transaction volume. Interestingly, as shown in Figure 7, Pasir Ris in the eastern region emerges as the town with the highest 3-room resale prices in 2024, despite not being near the central region - an area thought to be in demand from earlier analyses. A likely explanation lies in the relatively longer remaining lease of 3-room flats in Pasir Ris compared to other older towns, where the same flat type has a shorter lease remaining, as illustrated in Figure 8 below. Even though the remaining lease in Sembawang, Punggol and Sengkang have comparable or even longer remaining lease, Pasir Ris still commands higher prices, possibly due to more established transport nodes and amenities.
+
+```{r remaining lease by town,echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+# Plot of remaning lease across Singapore
+sg_map_cleaned %>%
+  left_join(
+    resale_income %>%
+      filter(year == 2024, flat_type == "3 ROOM") %>%
+      group_by(town) %>%
+      summarise(median_lease = median(remaining_lease, na.rm = TRUE), .groups = "drop"),
+    by = "town"
+  ) %>%
+  ggplot() +
+  geom_sf(aes(fill = median_lease), color = "white", size = 0.2) +
+   # Add text labels for Pasir ris Sembawang Pungggol Sengkang
+  geom_sf_text(
+    data = . %>% filter(town %in% c("PASIR RIS", "SEMBAWANG", "PUNGGOL","SENGKANG")),
+    aes(label = town),
+    size = 1.7,
+    fontface = "bold",
+    color = "black"
+  ) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::comma, na.value = "grey90") +
+  labs(
+    title = "Figure 8. Remaining Lease of 3-Room Flats by Town (2024)",
+    subtitle = "Grey regions represent areas with no recorded transactions",
+    fill  = "Median Remaining Lease",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(face = "italic", size = 12))
+```
+
+Having studied overall price trends by flat types and across towns and regions, the focus of the next section will be shifted to housing affordability.
+
+## Changes in Housing Affordability in the HDB Resale Market
+
+To measure affordability, we used the Price-to-Income (P/I) ratio - a widely used benchmark to examine housing affordability. The P/I ratio provides a simple yet effective measure of whether households can reasonably finance their home purchases. This measure is also frequently used by economists and organisations like the Organisation for Economic Co-operation and Development (OECD) as a proxy to track affordability over time and across regions (Biljanovska et al., 2023).
+
+To calculate P/I ratio, we divided the median resale price by the median annual household income. A lower P/I ratio would indicate better affordability whereas a higher P/I would indicate reduced affordability.
+
+```{r calculate PI ratio, echo=FALSE}
+resale_income_PI <- resale_income %>%
+  mutate(PI_ratio = resale_price / (median * 12))
+```
+
+### Overall P/I ratio trend
+
+```{r overall P/I across years, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+resale_income_PI %>%
+  group_by(year) %>%
+  summarise(median_PI = median(PI_ratio, na.rm = TRUE)) %>%
+  ggplot(aes(x = year, y = median_PI)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_point(color = "steelblue", size = 2) +
+  scale_x_continuous(breaks = seq(1990, 2024, by = 2)) +
+  labs(
+    title = "Figure 9. Trend of Median Price-to-Income Ratio Over Time",
+    x = "Year",
+    y = "Median P/I Ratio"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+As illustrated in Figure 9, affordability dropped remarkably after 1992 as P/I ratio experienced steep year-on-year increase for the next five years till 1997. This was due to a combination of favorable factors such as good economic growth, high savings and low interests. P/I ratio dropped sharply between 1997 to 2001 after a series of cooling measures such as the introduction of seller's stamp duty and housing loan limits to curb speculative activities (Low, 2025). In the two decades that followed, there were periods of P/I ratio spikes (late 2000s) followed by periods of cooling off (mid 2010s). Since 2020, P/I ratio has trended upwards once again, indicating a decline in affordability in the post-pandemic period.
+
+### P/I ratio by Flat Type
+
+```{r pi by flat type, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+resale_income_PI %>%
+  filter(year <= 2024) %>% # No income data for 2025
+  group_by(year, flat_type) %>%
+  summarise(median_pi = median(PI_ratio, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = median_pi, color = flat_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 1.5) +
+  scale_x_continuous(breaks = seq(1990, 2024, by = 2)) +
+  scale_y_continuous(labels = comma_format()) +
+  labs(
+    title = "Figure 10. Median P/I Ratio by Flat Type (1990–2024)",
+    x = "Year",
+    y = "Median P/I Ratio",
+    color = "Flat Type"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_text(size = 10),    
+    legend.text  = element_text(size = 8)
+  )
+```
+
+Behaving consistently with resale price patterns, the P/I ratio is lowest for smaller flats (1- to 3-room) and highest for executive and multi-generation flat types (Figure 10).
+
+### Distribution of P/I ratio
+
+```{r pi ratio ridge plot by flat type, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+resale_income_PI %>%
+  filter(year %in% c(1990, 2000, 2010, 2020)) %>%
+  ggplot(aes(x = PI_ratio, y = factor(year), fill = flat_type)) +
+  geom_density_ridges(alpha = 0.7, scale = 1.2) +
+  facet_wrap(~flat_type, scales = "free_x") +
+  theme_minimal() +
+  labs(
+    title = "Figure 11. Spread of Affordability (P/I Ratio) in Selected Years",
+    x = "Price-to-Income Ratio",
+    y = "Year",
+    fill = "Flat Type"
+) +
+  theme(legend.title = element_text(size = 10),    # legend title
+    legend.text  = element_text(size = 8),     # legend labels
+    legend.key.size = unit(0.5, "cm"),
+    plot.title = element_text(face = "bold", size = 14)
+    )        
+```
+
+Looking at the ridge plot (Figure 11) of P/I ratio every ten years from 1990, we observe that while overall affordability declined compared to 1990, most flat types were more affordable in 2020 than in 2010 - an indication of improvement in affordability in recent times. Interestingly, for larger flat types (5-room and above), affordability in 2020 remains comparable to levels seen in 1990, suggesting persistent high costs for these units despite broader market trends.
+
+### Geospatial P/I ratio analysis
+
+```{r pi ratio by region, message=FALSE, warning=FALSE, echo=FALSE, dpi=300}
+resale_income_PI %>%
+  filter(year <= 2024) %>%
+  ggplot(aes(x = year, y = region, fill = PI_ratio)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "green", high = "red") +
+  labs(
+    title = "Figure 12. Heatmap of Price-to-Income Ratio by Region",
+    x = "Year",
+    y = "Region",
+    fill = "P/I Ratio"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8,),
+        axis.text.y = element_text(size = 8)) +
+    theme(
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+Geographically as shown in Figure 12, the central region has consistently exhibited higher P/I ratios, indicating lower affordability. Eastern, north-eastern and northern regions show relatively moderate P/I ratios while the western regions demonstrated lower P/I ratio consistently, suggesting affordable housing in the western region. These P/I ratio patterns further reinforced earlier resale price analyses - that location remains a crucial factor in driving affordability, and this is reflected in the demand for central areas or areas with more established infrastructures and connectivity.
+
+### Relationship between P/I ratio and lease
+
+```{r pi ratio and remaning lease hexbin plot, echo=FALSE, message=FALSE, warning=FALSE, dpi=300}
+resale_income_PI %>%
+  filter(remaining_lease<=99) %>% # Exclude the 51 transactions w errorneous lease decay
+  ggplot(aes(x = remaining_lease, y = PI_ratio)) +
+  scale_x_continuous(breaks = seq(0, 100, by = 10)) +
+  geom_hex(bins = 100) +   # bin count adjusted for data granularity
+  scale_fill_viridis_c(option = "magma", trans = "log10") +
+  labs(
+    title = "Figure 13. P/I Ratio vs Remaining Lease",
+    subtitle = "Hexbin plot showing affordability patterns across leases",
+    x = "Remaining Lease (years)",
+    y = "Price-to-Income Ratio",
+    fill = "Transaction Count"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+Although location is crucial in influencing affordability, lease decay is another key factor. Based on Figure 13, although older flats with remaining leases of 60 years or lesser are more affordable (lower P/I ratio) than newer flats, the density of transactions for these flats remained relatively low. This reflects the perception of HDB flats as long-term assets for households, where older flats with shorter leases are less attractive due to concerns of accelerated depreciation and tighter restrictions on financing and Central Provident Fund usage. Exceptions may still exist for flats under government schemes such as Selective En-Bloc Redevelopment Scheme (SERS) and the newly introduced Voluntary Early Redevelopment Scheme (VERS), where households may be willing to purchase older flats in anticipation of redevelopment opportunities.
+
+## Conclusion
+
+This report provides a comprehensive overview of trends in the HDB resale market from 1990 to 2025, and an evaluation of housing affordability over time. Key findings show an increase in resale prices, with larger flats and central regions commanding the highest prices. The composition of flats sold has also shifted over time, with 4-room flats dominating transactions. In addition, the actual size of flats has varied depending on the period they were built. 3-room flats still remain highly priced in selected towns as a result of longer remaining leases and established amenities.
+
+Affordability - measured using the P/I ratio - has fluctuated considerably across the decades. Most recently, P/I ratio has exhibited an upward trend, indicating that housing is again becoming less affordable relative to the median household income. Geographical analyses show that central region consistently have lesser affordability, whereas western region housings remain relatively affordable. Additionally, the concept of lease decay is important: older flats are more affordable yet see lower transaction volumes - reflecting buyers' perception of public housing flats as assets.
+
+Overall, these findings underscore the importance of both location and lease duration as determinants of resale prices and affordability. Policymakers, home buyers and owners can use this report's insights to better understand housing market dynamics, plan housing supply, and make informed sales or purchasing decisions.
+
+## References
+
+Biljanovska, N., Fu, C., & Igan, D. (2023). Housing Affordability: A New Dataset. *International Monetary Fund*. <https://www.imf.org/-/media/Files/Publications/WP/2023/English/wpiea2023247-print-pdf.ashx>
+
+Housing & Development Board. (2025). *Resale Flat Prices [Data set]*. Data.gov.sg. <https://data.gov.sg/collections/189/view>
+
+Liew, I. (2024). Housing prices not expected to rise indefinitely as markets show signs of easing: Desmond Lee. *The Straits Times (Online)*. <https://www.straitstimes.com/singapore/housing/housing-prices-not-expected-to-rise-indefinitely-as-markets-show-signs-of-easing-desmond-lee>
+
+Low, M. (2025, August 6). SG60: From surge to stability – a timeline of Singapore’s property market cooling measures, 1995 to 2025. *The Business Times (Online).* <https://www.businesstimes.com.sg/property/bt-sg60/sg60-surge-stability-timeline-singapores-property-market-cooling-measures-1995-2025/>
+
+Singapore Department of Statistics. (2001, February). *Singapore Census of Population 2000* [Press release]. <https://www.nas.gov.sg/archivesonline/data/pdfdoc/2001020903.htm>
+
+Singapore Department of Statistics. (2024). *Average and Median Monthly Household Employment Income Among Resident and Resident Employed Households*. SingStat Table Builder. <https://tablebuilder.singstat.gov.sg/table/CT/17870>
+
+Urban Redevelopment Authority. (2019). *Master Plan 2019 Planning Area Boundary (No Sea) [Data set]*. Data.gov.sg <https://data.gov.sg/datasets/d_4765db0e87b9c86336792efe8a1f7a66/view>
+
+## Appendix
