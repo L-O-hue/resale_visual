@@ -4,7 +4,7 @@
 This project analyzes HDB resale prices in Singapore from 1990 to 2025 to uncover trends and insights. Using R Markdown and data visualization techniques, the project highlights price patterns, affordability trends, and geographic differences.
 
 ## Dataset
-- The repository contains a **compressed folder** of datasets in CSV and JSON formats, including:
+- The repository contains a **compressed folder** of datasets in CSV, XLSX and JSON formats, including:
   - HDB resale transactions (1990–2025)
   - Median household income data (2000–2024)
   - Master Plan planning area boundaries
